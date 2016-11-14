@@ -1,0 +1,190 @@
+<html>
+<head>
+	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" />
+	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap-theme.min.css" />
+	<script type="text/javascript" src="http://code.jquery.com/jquery-1.11.1.js"></script>
+<script>
+
+var g_access_token = '';
+var g_username = '';
+var g_tracks = [];
+
+function getUsername(callback) {
+	console.log('getUsername');
+	var url = 'https://api.spotify.com/v1/me';
+	$.ajax(url, {
+		dataType: 'json',
+		headers: {
+			'Authorization': 'Bearer ' + g_access_token
+		},
+		success: function(r) {
+			console.log('got username response', r);
+			callback(r.id);
+		},
+		error: function(r) {
+			callback(null);
+		}
+	});
+}
+
+function createPlaylist(username, callback) {
+	console.log('createPlaylist', username);
+	var url = 'https://api.spotify.com/v1/users/' + username +
+		'/playlists';
+	$.ajax(url, {
+		method: 'POST',
+		data: JSON.stringify({
+			'name': 'Listening History',
+			'public': false
+		}),
+		dataType: 'json',
+		headers: {
+			'Authorization': 'Bearer ' + g_access_token,
+			'Content-Type': 'application/json'
+		},
+		success: function(r) {
+			console.log('create playlist response', r);
+			callback(r.id);
+		},
+		error: function(r) {
+			callback(null);
+		}
+	});
+}
+
+function checkPlaylists(username, callback) {
+	var url = 'https://api.spotify.com/v1/me/playlists'; 
+	$.ajax(url, {
+		dataType: 'json',
+		headers: {
+			'Authorization': 'Bearer ' + g_access_token
+		},
+		success: function(r) {
+			console.log('retrieved user playlists', r);
+			var exists = 0;
+	    for (i = 0; i < r.total; i++) {
+	      if (r.items[i].name == "Listening History") {
+	        exists = 1;
+	        callback(r.items[i].id);
+	      }
+			}
+			if (!exists) {
+				createPlaylist(username, callback);
+			}
+		},
+		error: function(r) {
+			callback(null);
+		}
+	});
+}
+
+function addTracksToPlaylist(username, playlist, tracks, callback) {
+	console.log('addTracksToPlaylist', username, playlist, tracks);
+	var url = 'https://api.spotify.com/v1/users/' + username +
+		'/playlists/' + playlist +
+		'/tracks';  
+	$.ajax(url, {
+		method: 'PUT',
+		data: '{ \"uris\" :' + JSON.stringify(tracks) + '}',
+		dataType: 'text',
+		headers: {
+			'Authorization': 'Bearer ' + g_access_token,
+			'Content-Type': 'application/json'
+		},
+		success: function(r) {
+			console.log('add track response', r);
+			callback(r.id);
+		},
+		error: function(r) {
+			callback(null);
+		}
+	});
+}
+
+function main() {
+	// parse hash
+	var hash = location.hash.replace(/#/g, '');
+	var all = hash.split('&');
+	var args = {};
+	console.log('all', all);
+	all.forEach(function(keyvalue) {
+		var idx = keyvalue.indexOf('=');
+		var key = keyvalue.substring(0, idx);
+		var val = keyvalue.substring(idx + 1);
+		args[key] = val;
+	});
+
+	g_tracks = JSON.parse(localStorage.getItem('createplaylist-tracks'));
+
+	console.log('got args', args);
+	console.log('got tracks', g_tracks);
+
+	if (typeof(args['access_token']) != 'undefined') {
+		// got access token
+		console.log('got access token', args['access_token']);
+		g_access_token = args['access_token'];
+	}
+
+	getUsername(function(username) {
+		console.log('got username', username);
+		checkPlaylists(username, function(playlist) {
+			console.log('created playlist', playlist);
+			addTracksToPlaylist(username, playlist, g_tracks, function() {
+				console.log('tracks added.');
+				var playlistlink = 'spotify:user:' + username + ':playlist:' + playlist;
+				$('#playlist').attr('src', 'https://embed.spotify.com/?uri=' + playlistlink)
+				$('#playlistlink').attr('href', playlistlink);
+				$('#creating').hide();
+				$('#done').show();
+			});
+		});
+	});
+}
+
+</script>
+<style type="text/css">
+
+	body {
+		background-color: #333;
+		color: #fff;
+		overflow: hidden;
+		border: 0;
+		margin: 0;
+		padding: 0;
+	}
+
+	.site-wrapper {
+		position: absolute;
+		left: 0px;
+		top: 0px;
+		width: 50%;
+	}
+
+	.site-wrapper-inner {
+		position: absolute;
+		right: -250px;
+		width: 500px;
+		height: 100px;
+	}
+
+</style>
+</head>
+<body onload="main()">
+	<div class="site-wrapper">
+		<div class="site-wrapper-inner">
+			<div id="creating" style="text-align: center;">
+				<h1>Creating playlist...</h1>
+			</div>
+			<div id="done" style="display: none; text-align: center;">
+				<h1>Done!</h1>
+				<p>
+					<iframe id="playlist" width="300" height="380" frameborder="0" allowtransparency="true"></iframe>
+					<a class="btn btn-lg btn-primary btn-success" id="playlistlink">
+						Open playlist in Spotify
+					</a>
+				</p>
+			</div>
+		</div>
+	</div>
+</body>
+</html>
